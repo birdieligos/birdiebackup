@@ -13,7 +13,9 @@ unloadNamespace("plyr")
 ############################################################# 
 #### META
 ############################################################# 
-meta <- bq_table_download("slstrategy.EMPOWER_2025.METAREPORT_RAW", bigint = "integer64")
+meta_1 <- bq_table_download("slstrategy.empower_api_data.META_ADS_RAW", bigint = "integer64")
+meta_2 <- bq_table_download("slstrategy.empower_api_data.META_ADS_RAW_thematic_final", bigint = "integer64")
+meta <- rbind(meta_1, meta_2)
 
 # MIGHT FIX LATER 
 meta$MESSAGING <- meta$BODY_AD_SETTINGS
@@ -29,7 +31,7 @@ meta <- meta %>%
 
 # CTA
 meta <- meta %>%
-  rename(CALL_TO_ACTION = CALL_TO_ACTION_TYPE)
+  rename(CALL_TO_ACTION = OBJECTIVE)
 
 # language
 meta <- meta %>%
@@ -68,12 +70,14 @@ meta <- meta %>% mutate(
 )
 
 
+# remove columns 
+meta <- select(meta, -REPORTING_STARTS, -REPORTING_ENDS, -ADS, -CALL_TO_ACTION_TYPE, -DELIVERY_LEVEL, -DELIVERY_STATUS, -BODY_AD_SETTINGS)
 
 
 ############################################################# 
 #### TIKTOK
 ############################################################# 
-tiktok <- bq_table_download("slstrategy.EMPOWER_2025.TIKTOKREPORT_RAW", bigint = "integer64")
+tiktok <- bq_table_download("slstrategy.empower_api_data.TIKTOKREPORT_RAW", bigint = "integer64")
 tiktok$AD_TYPE <- "Video"
 tiktok <- tiktok %>%
   rename(MESSAGING = TEXT)
@@ -119,7 +123,7 @@ tiktok <- tiktok %>%
 ############################################################# 
 #### GOOGLE (YOUTUBE)
 ############################################################# 
-google <- bq_table_download("slstrategy.EMPOWER_2025.YOUTUBEREPORT_RAW", bigint = "integer64")
+google <- bq_table_download("slstrategy.empower_api_data.YOUTUBE_ADS_RAW", bigint = "integer64")
 
 # clean up campaign col
 google <- google %>%
@@ -145,7 +149,7 @@ google <- google %>%
     )
   )
 
-meta <- meta %>%
+google <- google %>%
   mutate(
     CAMPAIGN_NAME = str_replace(CAMPAIGN_NAME, "\\s*[–-].*$", "")
   )
@@ -158,12 +162,12 @@ google <- google %>%
   rename(CTR_DESTINATION = CTR)
 
 google <- select(google, -AD_STATE, -FINAL_URL, -DISPLAY_URL, -VIDEO_ID,
-                 -CURRENCY_CODE, -CAMPAIGN_TYPE, -AD_GROUP_TYPE, -CAMPAIGN_SUBTYPE, -CAMPAIGN_STATE)
+                 -CURRENCY_CODE, -CAMPAIGN_TYPE, -CAMPAIGN_STATE)
 
-google$ACCOUNT_NAME <- 
-
-# audience and geos 
-google <- google %>%
+google$ACCOUNT_NAME <- 'emPOWER'
+  
+  # audience and geos 
+  google <- google %>%
   separate(
     AD_GROUP_NAME,
     into   = c("prefix", "Geography", "AdType", "AudienceRaw", "rest"),
@@ -194,6 +198,24 @@ google$MESSAGING <-  google$AD_NAME
 
 
 ############################################################# 
+# compare column names across all
+meta_cols   <- names(meta)
+tiktok_cols <- names(tiktok)
+google_cols <- names(google)
+
+# columns present in one but missing in another
+meta_not_in_tiktok   <- setdiff(meta_cols, tiktok_cols)
+tiktok_not_in_meta   <- setdiff(tiktok_cols, meta_cols)
+
+meta_not_in_google   <- setdiff(meta_cols, google_cols)
+google_not_in_meta   <- setdiff(google_cols, meta_cols)
+
+# print mismatches
+cat("In meta but not in tiktok:\n", paste(meta_not_in_tiktok, collapse = ", "), "\n\n")
+cat("In tiktok but not in meta:\n", paste(tiktok_not_in_meta, collapse = ", "), "\n\n")
+
+cat("In meta but not in google:\n", paste(meta_not_in_google, collapse = ", "), "\n\n")
+cat("In google but not in meta:\n", paste(google_not_in_meta, collapse = ", "), "\n")
 #### MERGE DIGITAL
 ############################################################# 
 merge <- rbind(meta, tiktok, google)
@@ -401,7 +423,7 @@ cc$IMPRESSIONS <- 1
 # add reach
 cc$REACH <- ifelse(cc$STATUS_NAME %in% c('Human', 'Do NOT Call', 
                                          'Language Barrier', 'Refused/Hung Up', 'Wrong Number',
-                                           'Moved'), 1, 0)
+                                         'Moved'), 1, 0)
 # remove status name
 cc <- select(cc, -STATUS_NAME)
 
@@ -967,6 +989,7 @@ tryCatch({
 }, error = function(e) {
   cat("An error occurred:", conditionMessage(e), "\n")
 })
+
 
 
 
